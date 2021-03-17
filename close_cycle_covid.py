@@ -9,7 +9,7 @@ from enum import Enum
 from date_tools import conflict_period
 from datetime import datetime
 
-from cfg_secret_configuration import odoo_configuration_user_prod as odoo_configuration_user
+from cfg_secret_configuration import odoo_configuration_user_test as odoo_configuration_user
 
 class CounterType(Enum):
     FTOP = "ftop"
