@@ -5,8 +5,9 @@
 import sys
 
 import erppeek
+from openpyxl import load_workbook, Workbook
 
-from cfg_secret_configuration import odoo_configuration_user_test as odoo_configuration_user
+from cfg_secret_configuration import odoo_configuration_user_prod as odoo_configuration_user
 
 ###############################################################################
 # Odoo Connection
@@ -39,7 +40,27 @@ def get_translation_if_exist(source):
         value = source
     return value
 
+def save_to_xls(file_name, products):
+    next_row = 1
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Liste articles'
+
+    ws.append(("Code barre", "Fournisseur", "Nom produit", "Poids",
+        "Categorie mere", "Sous-categorie", "Unite de vente", "Colisage",
+        "Quantite mini", "Quantite vendu par jour"))
+    next_row += 1
+
+    for p in products:
+        ws.append((p['barcode'], p['supplier'], p['name'], p['weight'],
+            p['pcat'], p['cat'], p['unit'], p['pqty'], p['minqty'], p['sell']))
+        next_row += 1
+
+    wb.save(filename = file_name)
+
 print("Code barre;Fournisseur;Nom produit;Poids;Categ mere;Sous-categ;Unite de vente;Colisage;Quantite mini;Quantite vendu par jour")
+
+products = []
 
 for pp in openerp.ProductProduct.browse([
         ("active", "=", True),
@@ -48,29 +69,48 @@ for pp in openerp.ProductProduct.browse([
     pname = get_translation_if_exist(pp.name)
 
     # Get & Filter category
-    pcat = None
-    ppcat = None
+    mcat = None
+    scat = None
     cat = pt.read('categ_id')
-    if cat.parent_id is not False and (
-            cat.parent_id.id == 52 \
-            or cat.parent_id.id == 104):
+    pcat = cat.read('parent_id')
+
+    # Filter wanted cat
+    cat_to_filter = (96, 89, 124, 90, 85, 18, 4, 66, 82, 147, 148, 75)
+    if cat.id not in cat_to_filter and (not pcat or pcat.id not in cat_to_filter):
         continue
+
+    if cat.parent_id is not False:
+        mcat = pcat.name
+        scat = cat.name
     else:
-        pcat = cat.name
-        if cat.parent_id is not False:
-            ppcat = cat.parent_id.name
+        mcat = cat.name
 
     # Get supplier infos
     sinfo = None
     sups = openerp.ProductSupplierinfo.browse([("product_tmpl_id", "=", pt.id)])
     if sups is not None and len(sups) > 0:
         sinfo = sups[0]
+    else:
+        continue
 
     # Get average sell
     weekly = pp.read('displayed_average_consumption')
     daily_sell = weekly / 5 # store is open 5 days a week
-        
 
     print("%s;%s;%s;%s;%s;%s;%s;%s;%s;%s" % (pp.barcode, sinfo.name, pname,
-        pt.weight_net, ppcat, pcat, pt.uom_id.name, sinfo.package_qty,
+        pt.weight_net, mcat, scat, pt.uom_id.name, sinfo.package_qty,
         sinfo.min_qty, daily_sell))
+
+    products.append({
+        'barcode': str(pp.barcode),
+        'supplier': str(sinfo.name),
+        'name': str(pname),
+        'weight': float(pt.weight_net),
+        'pcat': str(mcat),
+        'cat': str(scat),
+        'unit': str(pt.uom_id.name),
+        'pqty': int(sinfo.package_qty),
+        'minqty': int(sinfo.min_qty),
+        'sell': round(daily_sell, 1)})
+
+save_to_xls('articles.xls', products)
