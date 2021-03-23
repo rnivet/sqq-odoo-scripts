@@ -3,11 +3,12 @@
 
 
 import sys
+from datetime import datetime
 
 import erppeek
 from openpyxl import load_workbook, Workbook
 
-from cfg_secret_configuration import odoo_configuration_user_prod as odoo_configuration_user
+from cfg_secret_configuration import odoo_configuration_user_test as odoo_configuration_user
 
 ###############################################################################
 # Odoo Connection
@@ -30,6 +31,8 @@ openerp, uid, tz = init_openerp(
 # Script
 ###############################################################################
 
+DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+
 def get_translation_if_exist(source):
     # Get translated product name if any
     value = None
@@ -48,12 +51,14 @@ def save_to_xls(file_name, products):
 
     ws.append(("Code barre", "Fournisseur", "Nom produit", "Poids",
         "Categorie mere", "Sous-categorie", "Unite de vente", "Colisage",
-        "Quantite mini", "Quantite vendu par jour"))
+        "Quantite mini", "Quantite vendu par jour", "Nombre de commandes",
+        "Nombre de jours depuis la 1ere cmd"))
     next_row += 1
 
     for p in products:
         ws.append((p['barcode'], p['supplier'], p['name'], p['weight'],
-            p['pcat'], p['cat'], p['unit'], p['pqty'], p['minqty'], p['sell']))
+            p['pcat'], p['cat'], p['unit'], p['pqty'], p['minqty'], p['sell'],
+            p['nb_purchase'], p['first_purchase_since']))
         next_row += 1
 
     wb.save(filename = file_name)
@@ -64,7 +69,8 @@ products = []
 
 for pp in openerp.ProductProduct.browse([
         ("active", "=", True),
-        ("purchase_ok", "=", True)]):
+        ("purchase_ok", "=", True),
+        ("sale_ok", "=", True)]):
     pt = pp.read('product_tmpl_id')
     pname = get_translation_if_exist(pp.name)
 
@@ -97,9 +103,19 @@ for pp in openerp.ProductProduct.browse([
     weekly = pp.read('displayed_average_consumption')
     daily_sell = weekly / 5 # store is open 5 days a week
 
-    print("%s;%s;%s;%s;%s;%s;%s;%s;%s;%s" % (pp.barcode, sinfo.name, pname,
+    # Get all cmd during last 12 month
+    purchases = openerp.PurchaseOrderLine.browse([("product_id", "=", pp.id)],
+            order="create_date asc")
+    nb_purchase = len(purchases)
+    if nb_purchase > 0:
+        first_purchase_date = datetime.strptime(
+                purchases[0].create_date, DATE_FORMAT)
+        days_since_first_purchase = (datetime.now() - first_purchase_date).days
+
+
+    print("%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%d;%s" % (pp.barcode, sinfo.name, pname,
         pt.weight_net, mcat, scat, pt.uom_id.name, sinfo.package_qty,
-        sinfo.min_qty, daily_sell))
+        sinfo.min_qty, daily_sell, nb_purchase, first_purchase_date))
 
     products.append({
         'barcode': str(pp.barcode),
@@ -111,6 +127,8 @@ for pp in openerp.ProductProduct.browse([
         'unit': str(pt.uom_id.name),
         'pqty': int(sinfo.package_qty),
         'minqty': int(sinfo.min_qty),
-        'sell': round(daily_sell, 1)})
+        'sell': round(daily_sell, 1),
+        'nb_purchase': int(nb_purchase),
+        'first_purchase_since': int(days_since_first_purchase)})
 
 save_to_xls('articles.xls', products)
