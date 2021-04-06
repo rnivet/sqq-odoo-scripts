@@ -32,6 +32,7 @@ openerp, uid, tz = init_openerp(
 ###############################################################################
 
 DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+DATE_NOTIME_FORMAT = '%d-%m-%Y'
 
 def get_translation_if_exist(source):
     # Get translated product name if any
@@ -51,14 +52,14 @@ def save_to_xls(file_name, products):
 
     ws.append(("Code barre", "Fournisseur", "Nom produit", "Poids",
         "Categorie mere", "Sous-categorie", "Unite de vente", "Colisage",
-        "Quantite mini", "Quantite vendu par jour", "Nombre de commandes",
-        "Nombre de jours depuis la 1ere cmd"))
+        "Qte mini", "Qte vendu depuis 06/20", "Date 1ere vente",
+        "Nb cmds depuis 06/20"))
     next_row += 1
 
     for p in products:
         ws.append((p['barcode'], p['supplier'], p['name'], p['weight'],
-            p['pcat'], p['cat'], p['unit'], p['pqty'], p['minqty'], p['sell'],
-            p['nb_purchase'], p['first_purchase_since']))
+            p['pcat'], p['cat'], p['unit'], p['pqty'], p['minqty'],
+            p['total_sale'], p['date_first_sale'], p['nb_purchase']))
         next_row += 1
 
     wb.save(filename = file_name)
@@ -81,7 +82,7 @@ for pp in openerp.ProductProduct.browse([
     pcat = cat.read('parent_id')
 
     # Filter wanted cat
-    cat_to_filter = (96, 89, 124, 90, 85, 18, 4, 66, 82, 147, 148, 75)
+    cat_to_filter = (96, 89, 124, 90, 85, 18, 4, 66, 147, 148, 75, 30, 139)
     if cat.id not in cat_to_filter and (not pcat or pcat.id not in cat_to_filter):
         continue
 
@@ -99,13 +100,31 @@ for pp in openerp.ProductProduct.browse([
     else:
         continue
 
-    # Get average sell
-    weekly = pp.read('displayed_average_consumption')
-    daily_sell = weekly / 5 # store is open 5 days a week
+    # Get all sales since june 2020
+    total_sale = 0
+    date_first_sale = None
 
-    # Get all cmd during last 12 month
-    purchases = openerp.PurchaseOrderLine.browse([("product_id", "=", pp.id)],
-            order="create_date asc")
+    sales = openerp.PosOrderLine.browse([
+        ("product_id", "=", pp.id),
+        ("create_date", ">", '2020-06-01')],
+        order="create_date asc")
+
+    if sales and len(sales) > 0:
+        date_first_sale = datetime.strptime(
+                sales[0].create_date, DATE_FORMAT).strftime(DATE_NOTIME_FORMAT)
+
+    for sale in sales:
+        total_sale += sale.qty
+
+    #weekly = pp.read('displayed_average_consumption')
+    #daily_sell = weekly / 5 # store is open 5 days a week
+
+    # Get all cmd since june 2020
+    purchases = openerp.PurchaseOrderLine.browse([
+        ("product_id", "=", pp.id),
+        ("create_date", ">", '2020-06-01')],
+        order="create_date asc")
+
     nb_purchase = len(purchases)
     if nb_purchase > 0:
         first_purchase_date = datetime.strptime(
@@ -113,9 +132,9 @@ for pp in openerp.ProductProduct.browse([
         days_since_first_purchase = (datetime.now() - first_purchase_date).days
 
 
-    print("%s;%s;%s;%s;%s;%s;%s;%s;%s;%s;%d;%s" % (pp.barcode, sinfo.name, pname,
+    print("%s;%s;%s;%s;%s;%s;%s;%s;%s;%d;%s;%d" % (pp.barcode, sinfo.name, pname,
         pt.weight_net, mcat, scat, pt.uom_id.name, sinfo.package_qty,
-        sinfo.min_qty, daily_sell, nb_purchase, first_purchase_date))
+        sinfo.min_qty, total_sale, date_first_sale, nb_purchase))
 
     products.append({
         'barcode': str(pp.barcode),
@@ -127,8 +146,8 @@ for pp in openerp.ProductProduct.browse([
         'unit': str(pt.uom_id.name),
         'pqty': int(sinfo.package_qty),
         'minqty': int(sinfo.min_qty),
-        'sell': round(daily_sell, 1),
-        'nb_purchase': int(nb_purchase),
-        'first_purchase_since': int(days_since_first_purchase)})
+        'total_sale': int(total_sale),
+        'date_first_sale': str(date_first_sale),
+        'nb_purchase': int(nb_purchase)})
 
 save_to_xls('articles.xls', products)
