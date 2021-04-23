@@ -54,14 +54,15 @@ def main():
                 (args.date_naissance))
 
     # Get member from Odoo
-    member = openerp.ResPartner.browse([("name", "=", args.nom)])
-    if len(member) < 1:
+    members = openerp.ResPartner.browse([("name", "=", args.nom)])
+    if len(members) < 1:
         raise Exception('%s : Membre introuvable dans Odoo' % (args.nom))
 
-    print('Date de naissance avant : %s' % (member[0].birthdate))
-    print('Modification...')
-    member[0].birthdate = args.date_naissance
-    print('Date de naissance après : %s' % (member[0].birthdate))
+    for member in members:
+        print('Date de naissance avant : %s' % (member.birthdate))
+        print('Modification...')
+        member.birthdate = args.date_naissance
+        print('Date de naissance après : %s' % (member.birthdate))
 
 if __name__ == "__main__":
     main()
