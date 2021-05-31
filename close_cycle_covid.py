@@ -121,7 +121,8 @@ def add_counter_event(counter_type, member, point_qty, name, note,
 # Return the new state of the member (if changed)
 # 
 def close_cycle(member, date_cycle_begin, date_cycle_end,
-        date_attendance_rec_begin, date_attendance_rec_end, dry_run=True):
+        date_attendance_rec_begin, date_attendance_rec_end, nb_cycle,
+        dry_run=True):
 
     counter_event_name = "Cloture cycle ABCD %s" % datetime.strptime(date_cycle_end, DATE_FORMAT).strftime("%d/%m/%Y")
     new_counter_val = 0
@@ -138,7 +139,7 @@ def close_cycle(member, date_cycle_begin, date_cycle_end,
     
     # Special treatmemt for ftop members
     if is_member_flying(member):
-        new_counter_val = add_counter_event(CounterType.FTOP, member, -1,
+        new_counter_val = add_counter_event(CounterType.FTOP, member, - nb_cycle,
                 counter_event_name,
                 "Soustraction auto d'un point à un membre volant", dry_run)
     # Special treatment for fixed members
@@ -146,24 +147,26 @@ def close_cycle(member, date_cycle_begin, date_cycle_end,
         nb_shift = get_nb_shift_done(member, date_attendance_rec_begin,
                 date_attendance_rec_end)
         # Member attended at least one shift during cycle
-        if nb_shift >= 1:
-            add_counter_event(CounterType.FTOP, member, -1, counter_event_name,
+        if nb_shift >= nb_cycle:
+            add_counter_event(CounterType.FTOP, member, - nb_cycle,
+                    counter_event_name,
                     "Soustraction auto d'un point vacation à un membre fixe",
                     dry_run)
             # If member was not "up to date" increment its standard counter
-            if member.read('final_standard_point') < 0:
+            std_point = member.read('final_standard_point')
+            if std_point < 0:
+                max_point = min(- std_point, nb_cycle)
                 new_counter_val = add_counter_event(CounterType.STANDARD,
-                        member, 1, counter_event_name,
+                        member, max_point, counter_event_name,
                         "Membre fixe en alerte/suspendu + Présence à au moins \
                                 1 service pendant ce cycle => Ajout d'un point\
-                                 standard",
-                        dry_run)
+                                 standard", dry_run)
         # Member did not attend any shift during cycle
         else:
             # If member has some points on its ftop counter,
             #   use these to compensate
-            if member.read('final_ftop_point') > 0:
-                add_counter_event(CounterType.FTOP, member, -1,
+            if member.read('final_ftop_point') >= nb_cycle:
+                add_counter_event(CounterType.FTOP, member, - nb_cycle,
                         counter_event_name,
                         "Membre fixe absent pendant ce cycle + Compteur \
                                 vacation > 0 => Soustraction d'un point \
@@ -171,7 +174,7 @@ def close_cycle(member, date_cycle_begin, date_cycle_end,
                         dry_run)
             else:
                 new_counter_val = add_counter_event(CounterType.STANDARD,
-                        member, -1, counter_event_name,
+                        member, - nb_cycle, counter_event_name,
                         "Membre fixe absent pendant ce cycle + Compteur \
                                 vacation = 0 => Soustraction d'un point \
                                 standard",
@@ -190,42 +193,29 @@ def close_cycle(member, date_cycle_begin, date_cycle_end,
             return 0
 
 
+def main():
 
+    DRY_RUN = False
+    NB_CYCLE = 2
 
-# Cycle start & end date to look for member in vaca
-date_cycle_begin = '2021-02-15'
-date_cycle_end = '2021-03-13'
-date_attendance_rec_begin = '2021-02-18'
-date_attendance_rec_end = '2021-03-15'
+    # Cycle start & end date to look for member in vaca
+    date_cycle_begin = '2021-03-15'
+    date_cycle_end = '2021-05-08'
+    date_attendance_rec_begin = '2021-03-19'
+    date_attendance_rec_end = '2021-05-11'
 
-count = 0
-#print("Nom;Type;Statut;Changement d'état")
-for member in openerp.ResPartner.browse([
-    ("active", "=", True),
-    ("is_worker_member", "=", True),
-    ("is_unsubscribed", "=", False)]):
-    count +=1
-    state_changed = close_cycle(member, date_cycle_begin, date_cycle_end,
-            date_attendance_rec_begin, date_attendance_rec_end, False)
-    print("%s => %s" % (member.name, "ALERTE" if state_changed == 1 else "ok"))
+    count = 0
+    for member in openerp.ResPartner.browse([
+        ("active", "=", True),
+        ("is_worker_member", "=", True),
+        ("is_unsubscribed", "=", False)]):
+        count +=1
+        state_changed = close_cycle(member, date_cycle_begin, date_cycle_end,
+                date_attendance_rec_begin, date_attendance_rec_end, NB_CYCLE,
+                DRY_RUN)
+        print("%s => %s" % (member.name, "ALERTE" if state_changed == 1 else "ok"))
 
-print("%d members" % count)
-sys.exit(0)
+    print("%d members" % count)
 
-#member = openerp.ResPartner.get(2514)
-#member = openerp.ResPartner.get(267)
-#member = openerp.ResPartner.get(2055)
-#member = openerp.ResPartner.get(198)
-#member = openerp.ResPartner.get(349)
-#member = openerp.ResPartner.get(2060)
-member = openerp.ResPartner.get(2690)
-print(member_subscription_date(member))
-if is_member_flying(member):
-    print("Member %s is flying" % member.name)
-if is_member_fixed(member):
-    print("Member %s is fixed" % member.name)
-if is_member_exempted(member, date_cycle_begin, date_cycle_end):
-    print("Member %s is exempted" % member.name)
-print("Number of shifts attended: %d" % get_nb_shift_done(member, date_attendance_rec_begin, date_attendance_rec_end))
-close_cycle(member, date_cycle_begin, date_cycle_end,
-            date_attendance_rec_begin, date_attendance_rec_end)
+if __name__ == "__main__":
+    main()
