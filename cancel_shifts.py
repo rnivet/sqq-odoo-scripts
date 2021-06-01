@@ -35,7 +35,11 @@ openerp, uid, tz = init_openerp(
 ###############################################################################
 # Script
 ###############################################################################
-for shift in openerp.ShiftShift.browse([("active", "=", True), "&", ("date_begin", ">=", "2021-04-12"), ("date_begin", "<=", "2021-06-05")]):
+date_begin = "2021-06-07"
+date_end = "2021-08-29"
+
+for shift in openerp.ShiftShift.browse([("active", "=", True),
+    "&", ("date_begin", ">=", date_begin), ("date_begin", "<=", date_end)]):
     print(shift)
     for ticket in shift.shift_ticket_ids:
         if ticket.shift_type == 'ftop':
