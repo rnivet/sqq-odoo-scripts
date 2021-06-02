@@ -217,5 +217,22 @@ def main():
 
     print("%d members" % count)
 
+def test_member(name):
+    # Cycle start & end date to look for member in vaca
+    date_cycle_begin = '2021-03-15'
+    date_cycle_end = '2021-05-08'
+    date_attendance_rec_begin = '2021-03-19'
+    date_attendance_rec_end = '2021-05-11'
+
+    for member in openerp.ResPartner.browse([("name", "=", name)]):
+        print(member_subscription_date(member))
+        if is_member_flying(member):
+            print("Member %s is flying" % member.name)
+        if is_member_fixed(member):
+            print("Member %s is fixed" % member.name)
+        if is_member_exempted(member, date_cycle_begin, date_cycle_end):
+            print("Member %s is exempted" % member.name)
+        print("Number of shifts attended: %d" % get_nb_shift_done(member, date_attendance_rec_begin, date_attendance_rec_end))
+
 if __name__ == "__main__":
     main()
