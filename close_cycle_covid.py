@@ -196,13 +196,13 @@ def close_cycle(member, date_cycle_begin, date_cycle_end,
 def main():
 
     DRY_RUN = False
-    NB_CYCLE = 2
+    NB_CYCLE = 1
 
     # Cycle start & end date to look for member in vaca
-    date_cycle_begin = '2021-03-15'
-    date_cycle_end = '2021-05-08'
-    date_attendance_rec_begin = '2021-03-19'
-    date_attendance_rec_end = '2021-05-11'
+    date_cycle_begin = '2021-05-10'
+    date_cycle_end = '2021-06-05'
+    date_attendance_rec_begin = '2021-05-13'
+    date_attendance_rec_end = '2021-06-07'
 
     count = 0
     for member in openerp.ResPartner.browse([
