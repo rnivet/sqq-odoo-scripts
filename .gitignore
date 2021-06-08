@@ -2,3 +2,5 @@ cfg_secret_configuration.py
 __pycache__
 *.xls
 *.csv
+*.out
+test*
