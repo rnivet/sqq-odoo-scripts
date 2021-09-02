@@ -146,11 +146,11 @@ def close_cycle(member, date_cycle_begin, date_cycle_end,
     elif is_member_fixed(member):
         nb_shift = get_nb_shift_done(member, date_attendance_rec_begin,
                 date_attendance_rec_end)
-        # Member attended at least one shift during cycle
+        # Member attended at least one shift per cycle
         if nb_shift >= nb_cycle:
             add_counter_event(CounterType.FTOP, member, - nb_cycle,
                     counter_event_name,
-                    "Soustraction auto d'un point vacation à un membre fixe",
+                    "Soustraction auto des points vacation à un membre fixe",
                     dry_run)
             # If member was not "up to date" increment its standard counter
             std_point = member.read('final_standard_point')
@@ -158,26 +158,34 @@ def close_cycle(member, date_cycle_begin, date_cycle_end,
                 max_point = min(- std_point, nb_cycle)
                 new_counter_val = add_counter_event(CounterType.STANDARD,
                         member, max_point, counter_event_name,
-                        "Membre fixe en alerte/suspendu + Présence à au moins \
-                                1 service pendant ce cycle => Ajout d'un point\
-                                 standard", dry_run)
-        # Member did not attend any shift during cycle
+                        ("Membre fixe en alerte/suspendu + Présence à au moins"
+                            "1 service pendant ce cycle => Ajout d'un point"
+                            "standard"), dry_run)
+        # Member did not attend enough shifts during cycle(s)
         else:
+            available_ftop_points = member.read('final_ftop_point')
             # If member has some points on its ftop counter,
             #   use these to compensate
-            if member.read('final_ftop_point') >= nb_cycle:
-                add_counter_event(CounterType.FTOP, member, - nb_cycle,
+            if available_ftop_points > 0:
+                points_to_remove = min(available_ftop_points, nb_cycle)
+                remaining_points = nb_cycle - points_to_remove
+                add_counter_event(CounterType.FTOP, member, - points_to_remove,
                         counter_event_name,
-                        "Membre fixe absent pendant ce cycle + Compteur \
-                                vacation > 0 => Soustraction d'un point \
-                                vacation",
+                        ("Membre fixe absent pendant ce cycle + Compteur"
+                            "vacation > 0 => Soustraction de points vacation"),
                         dry_run)
+                # If still remaining_points, remove them from standard counter
+                if remaining_points > 0:
+                    new_counter_val = add_counter_event(CounterType.STANDARD,
+                            member, - remaining_points, counter_event_name,
+                            ("Membre fixe absent pendant ce cycle + Compteur"
+                                "vacation = 0 => Soustraction de points standard"),
+                            dry_run)
             else:
                 new_counter_val = add_counter_event(CounterType.STANDARD,
                         member, - nb_cycle, counter_event_name,
-                        "Membre fixe absent pendant ce cycle + Compteur \
-                                vacation = 0 => Soustraction d'un point \
-                                standard",
+                        ("Membre fixe absent pendant ce cycle + Compteur"
+                            "vacation = 0 => Soustraction de points standard"),
                         dry_run)
 
         # Check if member state changed
@@ -193,16 +201,12 @@ def close_cycle(member, date_cycle_begin, date_cycle_end,
             return 0
 
 
-def main():
+def main(cycle_dates, nb_cycle=1, dry_run=False):
 
-    DRY_RUN = False
-    NB_CYCLE = 1
-
-    # Cycle start & end date to look for member in vaca
-    date_cycle_begin = '2021-05-10'
-    date_cycle_end = '2021-06-05'
-    date_attendance_rec_begin = '2021-05-13'
-    date_attendance_rec_end = '2021-06-07'
+    date_cycle_begin = cycle_dates['date_cycle_begin']
+    date_cycle_end = cycle_dates['date_cycle_end']
+    date_attendance_rec_begin = cycle_dates['date_attendance_rec_begin']
+    date_attendance_rec_end = cycle_dates['date_attendance_rec_end']
 
     count = 0
     for member in openerp.ResPartner.browse([
@@ -211,18 +215,17 @@ def main():
         ("is_unsubscribed", "=", False)]):
         count +=1
         state_changed = close_cycle(member, date_cycle_begin, date_cycle_end,
-                date_attendance_rec_begin, date_attendance_rec_end, NB_CYCLE,
-                DRY_RUN)
+                date_attendance_rec_begin, date_attendance_rec_end, nb_cycle,
+                dry_run)
         print("%s => %s" % (member.name, "ALERTE" if state_changed == 1 else "ok"))
 
     print("%d members" % count)
 
-def test_member(name):
-    # Cycle start & end date to look for member in vaca
-    date_cycle_begin = '2021-03-15'
-    date_cycle_end = '2021-05-08'
-    date_attendance_rec_begin = '2021-03-19'
-    date_attendance_rec_end = '2021-05-11'
+def test_member(name, cycle_dates):
+    date_cycle_begin = cycle_dates['date_cycle_begin']
+    date_cycle_end = cycle_dates['date_cycle_end']
+    date_attendance_rec_begin = cycle_dates['date_attendance_rec_begin']
+    date_attendance_rec_end = cycle_dates['date_attendance_rec_end']
 
     for member in openerp.ResPartner.browse([("name", "=", name)]):
         print(member_subscription_date(member))
@@ -233,6 +236,19 @@ def test_member(name):
         if is_member_exempted(member, date_cycle_begin, date_cycle_end):
             print("Member %s is exempted" % member.name)
         print("Number of shifts attended: %d" % get_nb_shift_done(member, date_attendance_rec_begin, date_attendance_rec_end))
+        state_changed = close_cycle(member, date_cycle_begin, date_cycle_end,
+                date_attendance_rec_begin, date_attendance_rec_end, 2, False)
+        print("%s => %s" % (member.name, "ALERTE" if state_changed == 1 else "ok"))
 
 if __name__ == "__main__":
-    main()
+    # Cycle start & end date
+    nb_cycle = 2
+    dry_run = False
+    cycle_dates = {
+            'date_cycle_begin': '2021-07-05',
+            'date_cycle_end': '2021-08-28',
+            'date_attendance_rec_begin': '2021-07-09',
+            'date_attendance_rec_end': '2021-08-30'
+        }
+    main(cycle_dates, nb_cycle, dry_run)
+    #test_member("SAMNEANG, Anny", cycle_dates)
