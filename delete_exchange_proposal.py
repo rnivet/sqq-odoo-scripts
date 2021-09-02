@@ -48,7 +48,7 @@ def main():
             description='Supprime les traces d\'echanges d\'un service')
     parser.add_argument('nom', help='Nom du membre (NOM, prenom)')
     parser.add_argument('date_service',
-            help='Date du service (YYYY-MM-DD)')
+            help='Date du service (YYYY-MM-DD HH:MM)')
     args = parser.parse_args()
 
     # Check arg format
@@ -57,7 +57,7 @@ def main():
         date_service = datetime.strptime(args.date_service, '%Y-%m-%d %H:%M').\
                 replace(tzinfo = tz.tzlocal())
     except Exception as e:
-        raise Exception('%s : Mauvais format de date (AAAA-MM-JJ)' %\
+        raise Exception('%s : Mauvais format de date (AAAA-MM-JJ HH:MM)' %\
                 (args.date_service))
 
     # Get member from Odoo
