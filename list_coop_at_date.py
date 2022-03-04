@@ -4,11 +4,13 @@
 
 import sys
 import erppeek
+import argparse
 
 from datetime import datetime
 from openpyxl import load_workbook, Workbook
 
-from cfg_secret_configuration import odoo_configuration_user_test as odoo_configuration_user
+from cfg_secret_configuration\
+        import odoo_configuration_user_test as odoo_configuration_user
 
 ###############################################################################
 # Odoo Connection
@@ -30,12 +32,12 @@ openerp, uid, tz = init_openerp(
 # Script
 ###############################################################################
 
-DATE_FORMAT = '%Y-%m-%d'
-
 def read_odoo_coops(at_date):
     odoo_coops = []
 
-    partners = openerp.ResPartner.browse([("is_member", "=", True)])
+    partners = openerp.ResPartner.browse([
+        ("is_member", "=", True),
+        ("active", "in", [True, False])])
     for partner in partners:
         # Find all capital invoices for the partner
         capital = 0
@@ -44,12 +46,11 @@ def read_odoo_coops(at_date):
                 ("is_capital_fundraising", "=", True),
                 ("state", "=", "paid"),
                 ("date_invoice", "!=", False)]):
-            invoice_date = datetime.strptime(invoice.date_invoice, DATE_FORMAT)
+            invoice_date = datetime.strptime(invoice.date_invoice, '%Y-%m-%d')
             if invoice_date < at_date:
                 capital += invoice.amount_total_signed
         # If total amount of capital bought before 2020 is null, skip the coop
         if capital == 0:
-            print(partner.name)
             continue
         try:
             (nom, prenom) = partner.name.split(',')
@@ -63,15 +64,16 @@ def read_odoo_coops(at_date):
                 }
             odoo_coops.append(coop)
         except:
+            print(partner.name)
             continue
     return odoo_coops
 
-def save_to_xls(file_name, coops):
+def save_to_xls(file_name, date, coops):
     DST_FILE = file_name
     next_row = 1
     wb = Workbook()
     ws = wb.active
-    ws.title = 'Capital parts A au 31-12-2020'
+    ws.title = 'Capital parts A au ' + date.replace('/', '-')
 
     ws.append(('Nom', 'Prenom', 'Adresse', 'Nb de parts', 'Capital'))
     next_row += 1
@@ -88,6 +90,26 @@ def dump_to_csv(coops):
         print("%s;%s;%s" % (coop['nom'], coop['prenom'], coop['mail']))
 
 
-at_date = datetime.strptime("2021-03-05", DATE_FORMAT)
-#save_to_xls("out.xls", read_odoo_coops(at_date))
-dump_to_csv(read_odoo_coops(at_date))
+def main():
+    # Configure arguments parser
+    parser = argparse.ArgumentParser(
+            description=('Liste les cooperateurs',
+            ' possesseurs de parts à une date donnée'))
+    parser.add_argument('date',
+            help='Date effective (31/12/2022)')
+    args = parser.parse_args()
+
+    # Check arg format
+    at_date = None
+    try:
+        at_date = datetime.strptime(args.date, '%d/%m/%Y')
+    except Exception as e:
+        raise Exception('%s : Mauvais format de date (JJ/MM/AAAA)' %\
+                (args.date))
+
+    coop_list = read_odoo_coops(at_date)
+    save_to_xls("out.xls", args.date, coop_list)
+    #dump_to_csv(coop_list)
+
+if __name__ == "__main__":
+    main()
